@@ -1,4 +1,5 @@
 import express from 'express';
+import pool from '../db.js';
 const router = express.Router();
 
 let links = [
@@ -35,13 +36,13 @@ const shortner_logic = () =>{
 router.post('/',(req,res,next) =>{
     if(!req.body || !req.body.org){
         const err = Error("title or req body not properly sent");
-        err.status(404);
+        err.status = 404;
         return next(err);
     }
     const exist = links.find((link) => link.org == req.body.org);  //exist is basically the object we get 
     if(exist){
         const err = Error("the following link already exists");
-        err.status(404);
+        err.status = 404;
         return next(err);   
     }
     const newShort = shortner_logic();
@@ -65,7 +66,7 @@ router.get('/:code',(req,res,next)=>{
     const real = links.find((link) => link.short == code);
     if(!real){
         const err = Error("link not found");
-        err.status(404);
+        err.status = 404;
         return next(err);
     }
     res.redirect(real.org); //redirects send 302 status by default
