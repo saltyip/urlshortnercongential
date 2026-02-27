@@ -1,5 +1,6 @@
 import express from 'express';
 import pool from '../db.js';
+import hashing_logic from '../servicehandler/bcrypthandler.js'
 const router = express.Router();
 
 const shortner_logic = (id) =>{
@@ -17,7 +18,6 @@ const shortner_logic = (id) =>{
     return string || "0";
 
 };
-
 
 // @desc TO CREATE LINK OR GET LINK 
 // @route POST
@@ -111,5 +111,27 @@ try {
 }
 
 });
+
+//@desc to register users
+//@route POST
+router.post('/users/register',async (req,res,next)=>{
+    try{
+        if(!req.body || !req.body.username || !req.body.password){
+            const err = new Error("body or username or password is not correct");
+            err.status = 400;
+            return next(err);
+        }
+        const hashedpass = await hashing_logic(req.body.password);
+        const user_result = await pool.query('INSERT INTO users (username,password_hash) VALUES ($1,$2) RETURNING*;',[req.body.username,hashedpass]);
+        res.status(201).json({msg: `username with ${req.body.username} created`});
+    }
+    catch(err){
+        if(err.code === '23505'){
+            return res.status(409).json({msg : "username already exist"});
+        }
+        next(err);
+    }
+});
+
 
 export default router;
