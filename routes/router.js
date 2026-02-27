@@ -22,32 +22,37 @@ const shortner_logic = (id) =>{
 // @desc TO CREATE LINK OR GET LINK 
 // @route POST
 router.post('/',async(req,res,next) =>{
+    const client = await pool.connect();
     try{
         if(!req.body || !req.body.org){
             const err = new Error("title or req body not properly sent");
             err.status = 400; //400 is for bad request
             return next(err);
         }
-        const exist_query = 'SELECT original_url FROM urls WHERE original_url = $1;';
-        const exist_result = await pool.query(exist_query,[req.body.org]);
-        if(exist_result.rows.length){
-            return res.status(200).json({msg: "already exists"});
-        }
-        const id_query = 'INSERT INTO urls (original_url) VALUES ($1) RETURNING id;';
-        const result_logic = await pool.query(id_query,[req.body.org]); 
-        const id = result_logic.rows[0].id;
-        const newShort = shortner_logic(result_logic.rows[0].id);
+        await client.query("BEGIN;")
+        const query = 'INSERT INTO urls (original_url) VALUES ($1) ON CONFLICT (original_url) DO NOTHING RETURNING id;';
+        const query_result = await client.query(query,[req.body.org]);
 
-
-        const insert_query = 'UPDATE urls SET short_code = $1 WHERE id = $2 RETURNING *;';
-        const result_post = await pool.query(insert_query,[newShort,id]);
-        res.status(201).json({msg: result_post.rows[0]});
+        if(query_result.rows.length === 0){
+            const b_result = await client.query('SELECT * FROM urls WHERE original_url = $1',[req.body.org]);
+            await client.query('COMMIT');
+            return res.status(201).json({msg:b_result.rows[0]});
         }
+        const id = query_result.rows[0].id;
+        const newShort = shortner_logic(id);
+        const result_query = await client.query('UPDATE urls SET short_code =  $1 WHERE id = $2 RETURNING*;',[newShort,id]);
+        await client.query('COMMIT');
+        res.status(201).json({msg: result_query.rows[0]});
+    }
     catch(err){
+        await client.query('ROLLBACK');
         if(err.code === '23505'){
             return res.status(409).json({msg:"already existss"});
         }
         next(err);
+    }
+    finally{
+        client.release();
     }
 }
 );
@@ -72,7 +77,7 @@ router.get('/:code',async (req,res,next)=>{
     const code_query = 'SELECT original_url FROM urls WHERE short_code = $1';
     const result_code = await pool.query(code_query,[req.params.code]);
     if(!result_code.rows.length){
-        const err = new Error("the following shor code couldnt be found")
+        const err = new Error("the following short code couldnt be found")
         err.status = 404;
         return next(err);
     }
