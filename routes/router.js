@@ -1,6 +1,11 @@
 import express from 'express';
 import pool from '../db.js';
 import hashing_logic from '../servicehandler/bcrypthandler.js'
+import jwt from 'jsonwebtoken'; 
+import authHandler from '../middleware/authHandler.js';   //havent implemented this yet
+
+
+
 const router = express.Router();
 
 const shortner_logic = (id) =>{
@@ -129,6 +134,38 @@ router.post('/users/register',async (req,res,next)=>{
         if(err.code === '23505'){
             return res.status(409).json({msg : "username already exist"});
         }
+        next(err);
+    }
+});
+
+//@desc login users
+//@route post
+router.post('/users/login',async(req,res,next) =>{
+    try{
+    if(!req.body || req.body.username || req.body.password){
+        const err = new Error("body or username or password is not correct");
+        err.status = 400;
+        return next(err);
+    }
+
+    const check_result = await pool.query('SELECT * FROM users WHERE username = $1',[req.body.username]);
+    if(!check_result.rows.length){
+        return res.status(200).json({msg:"the usernaem doesnt exist"});
+    }
+    const valid = await bcrypt.compare(req.body.password,check_result.rows[0].password_hash);
+    if(!valid){
+        return res.status(401).json({msg:"incorrect password"});
+    }
+    const token = jwt.sign(
+        {user_id: req.body.username},
+        process.env.JWT_SECRET,
+        {expiresIn: "15m"}
+    );
+
+    res.status(400).json({msg: "login succesfull"},{token_desc: token});
+
+    }
+    catch(err){
         next(err);
     }
 });
