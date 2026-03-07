@@ -2,7 +2,8 @@ import express from 'express';
 import pool from '../db.js';
 import hashing_logic from '../servicehandler/bcrypthandler.js'
 import jwt from 'jsonwebtoken'; 
-import authHandler from '../middleware/authHandler.js';   //havent implemented this yet
+import authHandler from '../middleware/authHandler.js'; 
+import bcrypt from 'bcrypt';
 
 
 
@@ -26,20 +27,22 @@ const shortner_logic = (id) =>{
 
 // @desc TO CREATE LINK OR GET LINK 
 // @route POST
-router.post('/',async(req,res,next) =>{
+router.post('/',authHandler,async(req,res,next) =>{
     const client = await pool.connect();
     try{
+        let userps = req.user.user_id;  
+
         if(!req.body || !req.body.org){
             const err = new Error("title or req body not properly sent");
             err.status = 400; //400 is for bad request
             return next(err);
         }
-        await client.query("BEGIN;")
-        const query = 'INSERT INTO urls (original_url) VALUES ($1) ON CONFLICT (original_url) DO NOTHING RETURNING id;';
-        const query_result = await client.query(query,[req.body.org]);
+        await client.query("BEGIN")
+        const query = 'INSERT INTO urls (user_id,original_url) VALUES ($1,$2) ON CONFLICT (user_id,original_url) DO NOTHING RETURNING id;';
+        const query_result = await client.query(query,[userps,req.body.org]);
 
         if(query_result.rows.length === 0){
-            const b_result = await client.query('SELECT * FROM urls WHERE original_url = $1',[req.body.org]);
+            const b_result = await client.query('SELECT * FROM urls WHERE original_url = $1 AND user_id = $2',[req.body.org,userps]);
             await client.query('COMMIT');
             return res.status(201).json({msg:b_result.rows[0]});
         }
@@ -62,34 +65,13 @@ router.post('/',async(req,res,next) =>{
 }
 );
 
-//@desc TO SHOW THE LINK
+//@desc TO SHOW ALL THE LINK
 //@route GET 
 router.get('/',async(req,res,next)=>{
     //res.status(200).json(links);
     try{
     const result_get = await pool.query('SELECT * FROM urls;');
     res.status(200).json(result_get.rows);
-    }
-    catch(err){
-        next(err);
-    }
-});
-
-//@desc REDIRECTS TO REAL LINK
-//@route GET
-router.get('/:code',async (req,res,next)=>{
-    try{
-    const code_query = 'SELECT original_url FROM urls WHERE short_code = $1';
-    const result_code = await pool.query(code_query,[req.params.code]);
-    if(!result_code.rows.length){
-        const err = new Error("the following short code couldnt be found")
-        err.status = 404;
-        return next(err);
-    }
-    const click_query = 'UPDATE urls SET clicks = clicks + 1 WHERE short_code = $1 '
-    await pool.query(click_query,[req.params.code]);
-    console.log(`redirected to ${result_code.rows[0].original_url} end`);
-    res.redirect(result_code.rows[0].original_url); //redirects send 302 status by default
     }
     catch(err){
         next(err);
@@ -117,6 +99,28 @@ try {
 
 });
 
+//@desc REDIRECTS TO REAL LINK
+//@route GET
+router.get('/:code',async (req,res,next)=>{
+    try{
+    const code_query = 'SELECT original_url FROM urls WHERE short_code = $1';
+    const result_code = await pool.query(code_query,[req.params.code]);
+    if(!result_code.rows.length){
+        const err = new Error("the following short code couldnt be found")
+        err.status = 404;
+        return next(err);
+    }
+    const click_query = 'UPDATE urls SET clicks = clicks + 1 WHERE short_code = $1 '
+    await pool.query(click_query,[req.params.code]);
+    console.log(`redirected to ${result_code.rows[0].original_url} end`);
+    res.redirect(result_code.rows[0].original_url); //redirects send 302 status by default
+    }
+    catch(err){
+        next(err);
+    }
+});
+
+
 //@desc to register users
 //@route POST
 router.post('/users/register',async (req,res,next)=>{
@@ -142,7 +146,7 @@ router.post('/users/register',async (req,res,next)=>{
 //@route post
 router.post('/users/login',async(req,res,next) =>{
     try{
-    if(!req.body || req.body.username || req.body.password){
+    if(!req.body || !req.body.username || !req.body.password){
         const err = new Error("body or username or password is not correct");
         err.status = 400;
         return next(err);
@@ -156,18 +160,32 @@ router.post('/users/login',async(req,res,next) =>{
     if(!valid){
         return res.status(401).json({msg:"incorrect password"});
     }
-    const token = jwt.sign(
-        {user_id: req.body.username},
+    const token = jwt.sign(             //this makes the token a decrypted jwt of user_id and secret key;
+        {user_id: check_result.rows[0].id},
         process.env.JWT_SECRET,
         {expiresIn: "15m"}
     );
 
-    res.status(400).json({msg: "login succesfull"},{token_desc: token});
+    res.status(200).json({msg: "login succesfull",token}); 
 
+    }
+    catch(err){
+        next(err);  
+    }
+});
+
+//@desc SHOW LINKS DONE BY USER
+//@route GET  and USERAUTh
+router.get('/userlinks',authHandler, async (req,res,next)=>{
+    try {
+        const curuserid = req.user.user_id;
+        const resultuser = await pool.query('SELECT * FROM urls WHERE user_id = $1',[curuserid]);
+        return res.status(200).json(resultuser.rows);
     }
     catch(err){
         next(err);
     }
+    
 });
 
 
