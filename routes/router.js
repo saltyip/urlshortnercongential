@@ -4,17 +4,14 @@ import hashing_logic from '../servicehandler/bcrypthandler.js'
 import jwt from 'jsonwebtoken'; 
 import authHandler from '../middleware/authHandler.js'; 
 import bcrypt from 'bcrypt';
+import loginlimiter from '../middleware/rateLimiter.js';
 
 
 
 const router = express.Router();
 
 const shortner_logic = (id) =>{
-    //const back_part_ind = org_link.lastIndexOf('/');
-    //const back_part = org_link.slice(back_part_ind);
-    //const front_part = org_link.slice(0,back_part_ind) + '/' ;
-
-
+    
     const char = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
     let string ="";
     while(id > 0){  
@@ -144,7 +141,7 @@ router.post('/users/register',async (req,res,next)=>{
 
 //@desc login users
 //@route post
-router.post('/users/login',async(req,res,next) =>{
+router.post('/users/login',loginlimiter,async(req,res,next) =>{
     try{
     if(!req.body || !req.body.username || !req.body.password){
         const err = new Error("body or username or password is not correct");
