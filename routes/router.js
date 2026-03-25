@@ -103,7 +103,7 @@ router.get('/:code',async (req,res,next)=>{
     const code_query = 'SELECT original_url FROM urls WHERE short_code = $1';
     const result_code = await pool.query(code_query,[req.params.code]);
     if(!result_code.rows.length){
-        const err = new Error("the following short code couldnt be found")
+        const err = new Error("The Following Short Code Couldnt Be Found")
         err.status = 404;
         return next(err);
     }
